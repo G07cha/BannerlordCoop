@@ -71,8 +71,46 @@ internal class PrisonerSaleProcessor : IPrisonerSaleProcessor
 
         foreach (var release in plan.PlayerReleases)
         {
+            GiveRansomGold(sellingParty, release.PrisonerHero);
             messageBroker.Publish(this, release);
         }
+    }
+
+    /// <summary>
+    /// Pays the seller the ransomed player hero's value, mirroring the gold vanilla
+    /// <see cref="SellPrisonersAction"/> grants for ordinary prisoners. The ransom value is zero when the
+    /// hero was already recently ransomed, so a repeat sale fetches no gold.
+    /// </summary>
+    private static void GiveRansomGold(PartyBase sellingParty, Hero playerHero)
+    {
+        if (Campaign.Current == null) return;
+
+        int ransomValue = Campaign.Current.Models.RansomValueCalculationModel.PrisonerRansomValue(
+            playerHero.CharacterObject,
+            sellingParty.LeaderHero);
+        if (ransomValue <= 0) return;
+
+        if (sellingParty.IsMobile)
+        {
+            Hero recipientHero = GetSellerRecipient(sellingParty);
+            if (recipientHero != null)
+            {
+                GiveGoldAction.ApplyBetweenCharacters(null, recipientHero, ransomValue, false);
+            }
+        }
+        else
+        {
+            GiveGoldAction.ApplyForPartyToSettlement(null, sellingParty.Settlement, ransomValue, false);
+        }
+    }
+
+    private static Hero GetSellerRecipient(PartyBase sellingParty)
+    {
+        if (sellingParty.LeaderHero != null && sellingParty.LeaderHero.HeroState == Hero.CharacterStates.Active)
+            return sellingParty.LeaderHero;
+        if (sellingParty.Owner != null && sellingParty.Owner.HeroState == Hero.CharacterStates.Active)
+            return sellingParty.Owner;
+        return sellingParty.MobileParty?.ActualClan?.Leader;
     }
 
     internal PrisonerSalePlan CreateSalePlan(

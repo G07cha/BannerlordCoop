@@ -4,6 +4,7 @@ using GameInterface.Services.Entity;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.Party;
 using GameInterface.Services.Party.Patches;
+using GameInterface.Services.PlayerCaptivityService;
 using GameInterface.Services.PlayerCaptivityService.Messages;
 using GameInterface.Services.Players;
 using GameInterface.Services.Players.Data;
@@ -97,7 +98,7 @@ public class PrisonerSaleProcessorTests
     }
 
     [Fact]
-    public void PrisonerRansomValue_PlayerHero_ReturnsZero()
+    public void PrisonerRansomValue_PlayerHero_NotRansomedToday_RunsOriginal()
     {
         var playerHero = ObjectHelper.SkipConstructor<Hero>();
         var playerCharacter = ObjectHelper.SkipConstructor<CharacterObject>();
@@ -125,12 +126,58 @@ public class PrisonerSaleProcessorTests
                 ref result,
                 playerCharacter);
 
+            Assert.True(runOriginal);
+        }
+        finally
+        {
+            GetPlayerObjects().Remove(playerHero);
+            PlayerRansomCooldownTracker.Reset();
+        }
+    }
+
+    [Fact]
+    public void PrisonerRansomValue_PlayerHero_RansomedWithinDay_ReturnsZero()
+    {
+        var playerHero = ObjectHelper.SkipConstructor<Hero>();
+        var playerCharacter = ObjectHelper.SkipConstructor<CharacterObject>();
+        playerCharacter.HeroObject = playerHero;
+        var objectManager = new Mock<IObjectManager>();
+        objectManager
+            .Setup(o => o.TryGetObjectWithLogging<Hero>("player-hero", out playerHero))
+            .Returns(true);
+        var registeredPlayers = new PlayerManager(
+            Mock.Of<Serilog.ILogger>(),
+            objectManager.Object,
+            new ControllerIdProvider());
+        registeredPlayers.AddPlayer(new Player(
+            "controller-1",
+            "player-hero",
+            string.Empty,
+            string.Empty,
+            string.Empty));
+
+        Campaign previousCampaign = Campaign.Current;
+        try
+        {
+            var campaign = ObjectHelper.SkipConstructor<Campaign>();
+            campaign.MapTimeTracker = new MapTimeTracker();
+            Campaign.Current = campaign;
+            PlayerRansomCooldownTracker.MarkRansomed(playerHero);
+
+            int result = 100;
+
+            var runOriginal = RansomPlayerValuePatch.PrisonerRansomValuePrefix(
+                ref result,
+                playerCharacter);
+
             Assert.False(runOriginal);
             Assert.Equal(0, result);
         }
         finally
         {
+            Campaign.Current = previousCampaign;
             GetPlayerObjects().Remove(playerHero);
+            PlayerRansomCooldownTracker.Reset();
         }
     }
 

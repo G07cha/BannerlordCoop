@@ -523,6 +523,12 @@ internal class PlayerCaptivityServerHandler : IHandler
             return;
         }
 
+        // A ransom release gives player a short "immunity" that zeroes the hero's next ransom value.
+        if (detail == EndCaptivityDetail.Ransom)
+        {
+            PlayerRansomCooldownTracker.MarkRansomed(playerHero);
+        }
+
         // Snapshot the captor before the release: clearing the captivity below nulls
         // PartyBelongedToAsPrisoner, and a captor defeated in battle may already be inactive.
         PartyBase captorParty = playerHero.PartyBelongedToAsPrisoner;
